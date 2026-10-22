@@ -78,13 +78,16 @@
       <div class="actions">
         <button type="button" id="add-day" class="btn">Add day</button>
         <button type="button" id="clear-table" class="btn">Clear table</button>
+        <button type="button" id="save-file" class="btn">Save to file</button>
+        <button type="button" id="open-file" class="btn">Open saved file</button>
+        <input type="file" id="file-input" accept=".csv,text/csv,text/plain" hidden>
       </div>
     </div>
     <p class="hint">Type the end-of-day account balance for each traded day, or paste the balance
       column (not daily profit or loss) into any cell, one balance per line. Dates and a day-number
       column are ignored. A line the page cannot read for certain stays in its row for you to fix.
       Empty rows are skipped. Pasting a column replaces that row and everything below it.</p>
-    <p id="paste-note" class="note" hidden></p>
+    <p id="paste-note" class="note" role="status" aria-live="polite" hidden></p>
     <p class="swipe-hint">Swipe the table sideways for more columns.</p>
     <div class="table-wrap">
       <table class="log">

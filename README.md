@@ -20,6 +20,9 @@ A single static page that checks an evaluation's consistency rule. It replaces t
 - Pass = consistent, total profit >= profit target, and traded days >= the minimum (15 or 10).
   Every row with a balance counts as a traded day; empty rows are skipped.
 
+Amounts use commas for thousands (50,123.45); a space inside an amount is never read, since
+"1 250.00" could be $1,250.00 or day 1 and $250.
+
 Pasted text: one balance per line (paste the balance column, not daily profit or loss).
 Dates, times, a few plain words (balance, close, weekday names, $, USD) and a day number in
 its own column, or written "1:" / "1." / "1)" / "Day 1", are ignored. The page never
@@ -31,11 +34,23 @@ Money is held in integer cents and the limit in basis points, so pass or fail ne
 on floating point rounding. Shown percentages round up, so a failing share never displays
 as the limit itself.
 
+## Save to file and open saved file
+
+"Save to file" downloads `consistency-check-YYYY-MM-DD.csv` (the date is Chicago's). It opens
+in Excel or Google Sheets: the settings, the result and its reasons, then one line per row
+with the balance, profit or loss, share of total and the total profit at which that day is
+fine. Text that a spreadsheet would run as a formula is written with a leading `'`.
+
+"Open saved file" reads such a file back. Only the inputs are read (settings, calculator
+fields and the Balance column); every figure is worked out again, so an edited result
+column can never change a verdict. A copy saved again by a spreadsheet with `;` or tabs
+also opens. The file never leaves the computer: it is read in the browser.
+
 ## Files
 
 - `index.html`, `styles.css`, `app.js`: the page.
 - `logic.js`: the rule, as pure functions.
-- `tests/logic.test.js`: `npm test` (Node 18 or later, no packages).
+- `tests/logic.test.js`, `tests/save.test.js`: `npm test` (Node 18 or later, no packages).
 
 Opening `index.html` straight from disk does not work (browsers block module scripts on
 `file://`). Use the Pages link, or serve the folder, for example `python -m http.server`.

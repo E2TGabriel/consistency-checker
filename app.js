@@ -1,5 +1,6 @@
 import {
   parseMoney, parsePercent, parsePastedBalances, formatMoney, formatPercent, analyze, calculate,
+  buildCsv, readSavedCsv,
 } from './logic.js';
 
 const DEFAULTS = { start: '50000', target: '3000', pct: '30', minDays: '15' };
@@ -146,8 +147,7 @@ els.rows.addEventListener('paste', (e) => {
   if (several.length) notes.push(`${rowsText(several)}: the line had more than one amount, so it was left as pasted. Type the balance in.`);
   if (unreadable.length) notes.push(`${rowsText(unreadable)}: no balance could be read from the line. Type it in.`);
   if (dropped) notes.push(`${dropped} line${dropped > 1 ? 's' : ''} past row ${MAX_ROWS} ${dropped > 1 ? 'were' : 'was'} left out.`);
-  els.pasteNote.textContent = notes.join(' ');
-  els.pasteNote.hidden = !notes.length;
+  showNote(notes.join(' ')); // update() below keeps it up once
   buildRows();
   update();
   els.rows.querySelector(`input[data-row="${lastPasted}"]`)?.focus();
@@ -246,7 +246,18 @@ function reasonItem(ok, text) {
   return li;
 }
 
+// A note under the table (paste warnings, an opened or refused file) describes the page as it
+// was at that moment, so the next change anywhere on the page takes it away.
+let keepNoteOnce = false;
+function showNote(text) {
+  els.pasteNote.textContent = text;
+  els.pasteNote.hidden = !text;
+  keepNoteOnce = true;
+}
+
 function update() {
+  if (keepNoteOnce) keepNoteOnce = false;
+  else els.pasteNote.hidden = true;
   const startCents = parseMoney(state.start);
   const targetCents = parseMoney(state.target);
   const pctBp = parsePercent(state.pct);
@@ -270,6 +281,7 @@ function update() {
     (e.startsWith('Enter the starting') && state.start.trim() ? 'The starting balance is not a number.' : e));
   if (badRows.length) errors.push(`Row${badRows.length > 1 ? 's' : ''} ${badRows.join(', ')}: not a number. Fix ${badRows.length > 1 ? 'them' : 'it'} to get a result.`);
 
+  lastResult = { ...res, inputErrors: errors };
   renderVerdict(res, errors, pctBp);
   renderRows(res, errors.length === 0);
   renderInverse(res, errors.length === 0, pctBp, targetCents);
@@ -508,7 +520,11 @@ function renderCalc() {
   }
   const r = calculate({ highest, total, pctBp: pct, defaultPctBp: 3000 });
   if (r.error) { out.textContent = r.error; return; }
-  if (!r.solved) { out.textContent = ''; return; }
+  if (!r.solved) {
+    // The sheet's own message when only the % is filled in.
+    out.textContent = raw.p ? 'Insert a value in Highest profit or Total profit.' : '';
+    return;
+  }
   const assumed = r.assumed ? ' (limit taken as 30%)' : '';
   if (r.solved === 'pct') {
     let t = `The highest profit is ${formatPercent(r.pctBp)} of total profit.`;
@@ -524,6 +540,63 @@ function renderCalc() {
     out.textContent = `With ${formatMoney(r.total)} total profit, the largest day can be at most ${formatMoney(r.highest)}${assumed}.`;
   }
 }
+
+// ---------- save to file / open saved file ----------
+
+let lastResult = null;
+
+function chicagoDate(d = new Date()) {
+  // en-CA writes YYYY-MM-DD; the date is Chicago's, whatever the viewer's own time zone.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+$('save-file').addEventListener('click', () => {
+  const day = chicagoDate();
+  const csv = buildCsv(state, lastResult, day);
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = el('a', { href: url, download: `consistency-check-${day}.csv` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // iPhone Safari asks before downloading, so the link must outlive that question.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+});
+
+const fileInput = $('file-input');
+$('open-file').addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  let data;
+  try {
+    data = file.size > 2_000_000 ? { error: 'That file is too big to be a saved case.' } : readSavedCsv(await file.text());
+  } catch {
+    data = { error: 'That file could not be read.' };
+  }
+  if (data.error) {
+    // No update() follows, so the next change on the page takes this note away.
+    els.pasteNote.textContent = data.error;
+    els.pasteNote.hidden = false;
+    keepNoteOnce = false;
+    return;
+  }
+  const hasWork = state.balances.some((b) => b.trim())
+    || ['start', 'target', 'pct', 'minDays'].some((k) => state[k].trim() !== DEFAULTS[k])
+    || [state.calcHighest, state.calcTotal, state.calcPct].some((v) => v.trim());
+  if (hasWork && !confirm('Replace what is on the page with the saved file?')) return;
+  Object.assign(state, { ...DEFAULTS, balances: [], calcHighest: '', calcTotal: '', calcPct: '' });
+  for (const key of ['start', 'target', 'pct', 'calcHighest', 'calcTotal', 'calcPct']) {
+    if (typeof data[key] === 'string') state[key] = data[key];
+  }
+  if (MIN_DAY_CHOICES.includes(data.minDays)) state.minDays = data.minDays;
+  state.balances = data.balances.slice(0, MAX_ROWS);
+  for (const [input, key] of [[els.start, 'start'], [els.target, 'target'], [els.pct, 'pct'],
+    [els.cHighest, 'calcHighest'], [els.cTotal, 'calcTotal'], [els.cPct, 'calcPct']]) input.value = state[key];
+  els.minDays.value = state.minDays;
+  showNote(`Opened ${file.name}.`); // update() below keeps it up once
+  buildRows();
+  update();
+});
 
 // ---------- start ----------
 
@@ -541,4 +614,8 @@ window.addEventListener('hashchange', () => {
   update();
 });
 let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(update, 120); });
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => {
+  // A resize (a phone turning, Safari's bar folding away) only redraws: any note stays up.
+  keepNoteOnce = true;
+  update();
+}, 120); });

@@ -23,7 +23,7 @@ test('parseMoney reads common platform formats', () => {
   assert.equal(parseMoney('$50,123.45'), 5012345);
   assert.equal(parseMoney('50123.4'), 5012340);
   assert.equal(parseMoney('50123'), 5012300);
-  assert.equal(parseMoney(' 50 123.45 '), 5012345);
+  assert.equal(parseMoney(' 50,123.45 '), 5012345);
   assert.equal(parseMoney('-120'), -12000);
   assert.equal(parseMoney('$-120.50'), -12050);
   assert.equal(parseMoney('-$120.50'), -12050);
@@ -33,7 +33,7 @@ test('parseMoney reads common platform formats', () => {
   assert.equal(parseMoney('.5'), 50);
   assert.equal(parseMoney('-0'), 0);
   assert.equal(parseMoney('100 USD'), 10000);
-  assert.equal(parseMoney('1 234 567.89'), 123456789);
+  assert.equal(parseMoney('1,234,567.89'), 123456789);
   assert.equal(parseMoney('9,000,000,000'), 9e11); // the cap itself is allowed
 });
 
@@ -489,4 +489,12 @@ test('calculator: empty, only a percent, and non-positive values', () => {
   assert.ok(calculate({ highest: null, total: 0, pctBp: null }).error);
   assert.equal(calculate({ highest: D(900), total: D(3000), pctBp: 3000 }).limitBp, 3000);
   assert.equal(calculate({ highest: 60000 }).total, D(2000)); // omitted fields count as empty
+});
+
+test('parseMoney: no spaces inside an amount, so a row the paste note flags never counts', () => {
+  for (const bad of ['1 250.00', '50 123.45', '1 234 567.89', '12 150 250.00', '50 123.45']) {
+    assert.equal(parseMoney(bad), null, bad);
+  }
+  assert.equal(parseMoney(' - 50 '), -5000); // a space after the sign is fine
+  assert.equal(parseMoney('$ 50,123.45'), 5012345);
 });

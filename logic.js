@@ -16,7 +16,7 @@ export const MAX_CENTS = 9e11; // $9,000,000,000
 
 // ---------- parsing ----------
 
-// "$50,123.45", "50123.45", "-120", "(120.00)", "+100", "50 123.45" -> cents, else null.
+// "$50,123.45", "50123.45", "-120", "(120.00)", "+100", "100 USD" -> cents, else null.
 export function parseMoney(raw) {
   if (raw === null || raw === undefined) return null;
   let s = String(raw).trim().replace(/−/g, '-');
@@ -29,9 +29,8 @@ export function parseMoney(raw) {
   if (s[0] === '-' || s[0] === '+') { neg = s[0] === '-'; signs++; s = s.slice(1).trim(); }
   if (signs > 1) return null; // "--5", "-(5)", "-$-5": not one amount
   s = s.replace(/ /g, ' ');
-  // A space is only a thousands separator ("50 123.45"). Anything else with whitespace, such
-  // as two pasted columns "1<tab>50123", is not one amount.
-  if (/^\d{1,3}( \d{3})+(\.\d*)?$/.test(s)) s = s.replace(/ /g, '');
+  // No spaces inside an amount: "1 250.00" could be $1,250.00 or a day number and $250, and
+  // "1<tab>50123" is two pasted columns, so neither is one amount. Commas group thousands.
   // At most two decimals: "1.234" is a European thousands group, never $1.23.
   if (!/^(\d{1,3}(,\d{3})+|\d+)?(\.\d{0,2})?$/.test(s)) return null;
   if (!/\d/.test(s)) return null;
@@ -301,4 +300,159 @@ export function calculate({ highest, total, pctBp, defaultPctBp = 3000 }) {
     return { solved: 'total', highest, pctBp: limit, assumed, total: totalNeededFor(highest, limit) };
   }
   return { solved: 'highest', total, pctBp: limit, assumed, highest: Math.floor((total * limit) / BP) };
+}
+
+// ---------- save to file / open saved file ----------
+// A CSV that opens in Excel or Google Sheets and that this page can read back. Money is
+// written as plain numbers (50600.00) so spreadsheets treat it as numbers. Anything typed
+// (settings, calculator fields, rows that are not a number) is written as quoted text, so a
+// spreadsheet never splits it on ; or runs it as a formula: text starting with ' = + - @ or
+// a tab gets one extra leading ' that opening the file takes off again.
+
+const CSV_TITLE = 'Consistency check';
+const SETTING_LABELS = {
+  start: 'Starting balance',
+  target: 'Profit target',
+  pct: 'Consistency limit (%)',
+  minDays: 'Minimum traded days',
+  calcHighest: 'Calculator: highest profit',
+  calcTotal: 'Calculator: total profit',
+  calcPct: 'Calculator: highest / total (%)',
+};
+const REQUIRED_SETTINGS = ['start', 'target', 'pct', 'minDays'];
+const TABLE_HEAD = ['Row', 'Day', 'Balance', 'Profit/loss', 'Share of total (%)', 'OK once total profit reaches'];
+const MAX_FILE_ROWS = 400;
+
+function plainMoney(cents) {
+  if (cents === null || cents === undefined || !Number.isFinite(cents)) return '';
+  const neg = cents < 0;
+  const abs = Math.abs(cents);
+  return `${neg ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+}
+function plainPercent(bp) {
+  if (bp === null || bp === undefined) return '';
+  return `${Math.floor(bp / 100)}.${String(bp % 100).padStart(2, '0')}`;
+}
+// Typed text: trimmed, guarded, and always quoted when written.
+function textCell(raw) {
+  const s = String(raw ?? '').trim();
+  return { text: /^['=+\-@\t\r]/.test(s) ? `'${s}` : s };
+}
+function untext(v) {
+  const s = String(v ?? '').trim();
+  return /^'['=+\-@\t\r]/.test(s) ? s.slice(1) : s;
+}
+function csvField(v) {
+  if (v && typeof v === 'object') return v.text === '' ? '' : `"${v.text.replace(/"/g, '""')}"`;
+  const s = String(v ?? '');
+  return /[",;\t\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// state: the page's raw inputs { start, target, pct, minDays, balances[], calcHighest, ... }
+// result: analyze() output for those inputs, plus inputErrors: the page's error lines (empty
+// when every input reads). savedOn: 'YYYY-MM-DD', Chicago's date.
+export function buildCsv(state, result, savedOn) {
+  // "2026-10-22 (Chicago)" is text to a spreadsheet, so it is never shown month first.
+  const rows = [[CSV_TITLE], ['Saved', `${savedOn} (Chicago)`]];
+  for (const [key, label] of Object.entries(SETTING_LABELS)) rows.push([label, textCell(state[key])]);
+  const problems = result && result.inputErrors ? result.inputErrors : [];
+  const valid = Boolean(result && result.ready) && problems.length === 0;
+  rows.push(['Result', !valid ? 'Check the inputs' : result.traded === 0 ? 'No days entered' : result.pass ? 'PASS' : 'FAIL']);
+  for (const p of problems) rows.push(['Problem', textCell(p)]);
+  if (valid && result.traded > 0) {
+    rows.push(['Total profit', plainMoney(result.total)]);
+    rows.push(['Largest day', result.largest > 0 ? plainMoney(result.largest) : '']);
+    rows.push(['Largest day share (%)', plainPercent(result.largestShareBp)]);
+    rows.push(['Profit target required', plainMoney(result.requiredTotal)]);
+    rows.push(['Days traded', String(result.traded)]);
+    for (const r of result.reasons) rows.push([r.ok ? 'Met' : 'Not met', textCell(r.text)]);
+  }
+  rows.push([]);
+  rows.push(TABLE_HEAD);
+  const byRow = new Map(valid ? result.days.map((d) => [d.row, d]) : []);
+  const balances = [...(state.balances || [])];
+  while (balances.length && !String(balances[balances.length - 1]).trim()) balances.pop();
+  balances.forEach((raw, i) => {
+    const d = byRow.get(i);
+    const cents = parseMoney(raw);
+    const balance = String(raw).trim() === '' ? '' : cents === null ? textCell(raw) : plainMoney(cents);
+    rows.push([
+      String(i + 1),
+      d ? String(d.day) : '',
+      balance,
+      d ? plainMoney(d.pnl) : '',
+      d && d.shareBp !== null ? plainPercent(d.shareBp) : '',
+      d && d.okAtTotal !== null ? plainMoney(d.okAtTotal) : '',
+    ]);
+  });
+  return '﻿' + rows.map((r) => r.map(csvField).join(',')).join('\r\n') + '\r\n';
+}
+
+// Splits CSV text into rows of fields (quotes, doubled quotes, separators and line breaks
+// inside quotes). The separator is read from the table's header line ("Row,Day,Balance"),
+// so a copy saved again by a spreadsheet with ; or tabs opens too.
+export function parseCsvRows(text) {
+  const s = String(text).replace(/^﻿/, '');
+  const head = s.split(/\r?\n/).find((l) => /^"?Row"?[,;\t]/.test(l.trim())) || s.split(/\r?\n/, 1)[0] || '';
+  const sep = /^"?Row"?;/.test(head.trim()) ? ';' : /^"?Row"?\t/.test(head.trim()) ? '\t'
+    : head.includes(',') ? ',' : head.includes(';') ? ';' : head.includes('\t') ? '\t' : ',';
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quoted) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; } else quoted = false;
+      } else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === sep) { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && s[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = '';
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Reads a file saved by buildCsv back into raw page inputs. Only the inputs are read; the
+// page works every figure out again, so an edited result column can never change a verdict.
+// Anything missing, doubled or out of range is refused with a reason rather than filled in.
+export function readSavedCsv(text) {
+  const notOurs = { error: 'This is not a file saved by this page.' };
+  const rows = parseCsvRows(text);
+  const titleAt = rows.findIndex((r) => (r[0] || '').trim() === CSV_TITLE);
+  const headAt = rows.findIndex((r) => (r[0] || '').trim() === 'Row' && (r[2] || '').trim() === 'Balance');
+  if (titleAt === -1 || headAt === -1 || headAt < titleAt) return notOurs;
+  const out = { balances: [] };
+  const byLabel = new Map();
+  for (const r of rows.slice(titleAt + 1, headAt)) {
+    const label = (r[0] || '').trim();
+    if (!Object.values(SETTING_LABELS).includes(label)) continue;
+    if (byLabel.has(label)) return { error: `"${label}" appears twice in the file.` };
+    byLabel.set(label, r[1] ?? '');
+  }
+  for (const [key, label] of Object.entries(SETTING_LABELS)) {
+    if (byLabel.has(label)) out[key] = untext(byLabel.get(label));
+    else if (REQUIRED_SETTINGS.includes(key)) return { error: `The file has no "${label}" line.` };
+    else out[key] = '';
+  }
+  if (!['15', '10'].includes(out.minDays)) {
+    return { error: `Minimum traded days in the file is "${out.minDays}"; it must be 15 or 10.` };
+  }
+  const seen = new Set();
+  for (const r of rows.slice(headAt + 1)) {
+    if (r.every((f) => !String(f).trim())) continue;
+    const label = (r[0] || '').trim();
+    const n = /^\d+$/.test(label) ? Number(label) : NaN;
+    if (!Number.isInteger(n) || n < 1) return { error: `"${label}" in the Row column of the file is not a row number.` };
+    if (n > MAX_FILE_ROWS) return { error: `Row ${n} in the file is past the last row (${MAX_FILE_ROWS}).` };
+    if (seen.has(n)) return { error: `Row ${n} appears twice in the file.` };
+    seen.add(n);
+    while (out.balances.length < n - 1) out.balances.push('');
+    out.balances[n - 1] = untext(r[2]);
+  }
+  return out;
 }

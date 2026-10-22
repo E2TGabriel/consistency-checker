@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Static page that checks an evaluation's consistency rule. No dependencies.",
   "scripts": {
-    "test": "node --test tests/logic.test.js"
+    "test": "node --test tests/logic.test.js tests/save.test.js"
   }
 }

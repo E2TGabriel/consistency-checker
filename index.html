@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex">
+<title>Consistency Checker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2322c55e'/%3E%3Cpath d='M8 17l5 5 11-12' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Consistency Checker</h1>
+    <p class="sub">Everything stays on this page. Nothing you type is sent anywhere.</p>
+  </div>
+  <div class="actions">
+    <button type="button" id="copy-link" class="btn">Copy link to this case</button>
+    <button type="button" id="reset-all" class="btn btn-danger">Clear everything</button>
+  </div>
+  <p id="live" class="sr" aria-live="polite"></p>
+</header>
+
+<main>
+  <section class="card settings" aria-labelledby="h-settings">
+    <h2 id="h-settings">Evaluation</h2>
+    <div class="grid4">
+      <label>Starting balance
+        <input id="start" inputmode="decimal" autocomplete="off" placeholder="e.g. 50,000">
+      </label>
+      <label>Profit target
+        <input id="target" inputmode="decimal" autocomplete="off" placeholder="e.g. 3,000">
+      </label>
+      <label>Consistency limit (%)
+        <input id="pct" inputmode="decimal" autocomplete="off" placeholder="e.g. 30">
+      </label>
+      <label>Minimum traded days
+        <select id="min-days">
+          <option value="15">15 days</option>
+          <option value="10">10 days</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="card verdict" aria-labelledby="badge">
+    <div id="badge" class="badge badge-wait">Enter balances</div>
+    <ul id="reasons" class="reasons"></ul>
+    <dl class="stats">
+      <div><dt>Total profit</dt><dd id="st-total">–</dd></div>
+      <div><dt>Largest day</dt><dd id="st-largest">–</dd></div>
+      <div><dt>Largest day share</dt><dd id="st-share">–</dd></div>
+      <div><dt>Profit target required</dt><dd id="st-required">–</dd></div>
+      <div><dt>Days traded</dt><dd id="st-days">–</dd></div>
+    </dl>
+  </section>
+
+  <section class="card" aria-labelledby="h-inverse">
+    <h2 id="h-inverse">What it takes</h2>
+    <ul id="inverse" class="inverse"></ul>
+  </section>
+
+  <section class="card" aria-labelledby="h-chart">
+    <h2 id="h-chart">Account balance</h2>
+    <div class="chart-wrap" id="chart-wrap">
+      <svg id="chart" role="img" aria-label="Account balance by day"></svg>
+      <div id="tip" class="tip" hidden></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-log">
+    <div class="row-head">
+      <h2 id="h-log">Daily balances</h2>
+      <div class="actions">
+        <button type="button" id="add-day" class="btn">Add day</button>
+        <button type="button" id="clear-table" class="btn">Clear table</button>
+      </div>
+    </div>
+    <p class="hint">Type the end-of-day account balance for each traded day, or paste the balance
+      column (not daily profit or loss) into any cell, one balance per line. Dates and a day-number
+      column are ignored. A line the page cannot read for certain stays in its row for you to fix.
+      Empty rows are skipped. Pasting a column replaces that row and everything below it.</p>
+    <p id="paste-note" class="note" hidden></p>
+    <p class="swipe-hint">Swipe the table sideways for more columns.</p>
+    <div class="table-wrap">
+      <table class="log">
+        <thead>
+          <tr><th>Day</th><th>Balance</th><th class="num">Profit / loss</th><th class="num">Share of total</th><th class="num">OK once total profit reaches</th><th><span class="sr">Clear</span></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-calc">
+    <h2 id="h-calc">Quick calculator</h2>
+    <p class="hint">Fill any two to get the third. With only a profit filled in, the limit is taken as 30%. With all three filled in, the % is used as the limit.</p>
+    <div class="grid3">
+      <label>Highest profit
+        <input id="c-highest" inputmode="decimal" autocomplete="off" placeholder="e.g. 600">
+      </label>
+      <label>Total profit
+        <input id="c-total" inputmode="decimal" autocomplete="off" placeholder="e.g. 3,225">
+      </label>
+      <label>Highest / total (%)
+        <input id="c-pct" inputmode="decimal" autocomplete="off" placeholder="e.g. 30">
+      </label>
+    </div>
+    <p id="calc-out" class="calc-out"></p>
+    <div class="actions">
+      <button type="button" id="clear-calc" class="btn">Clear calculator</button>
+    </div>
+  </section>
+
+  <section class="card rule" aria-labelledby="h-rule">
+    <h2 id="h-rule">The rule this page applies</h2>
+    <ul>
+      <li>Profit or loss for a day is that day's balance minus the previous one (day 1: minus the starting balance).</li>
+      <li>Total profit is the last balance minus the starting balance.</li>
+      <li>The largest day is the biggest winning day. Losing days never count as the largest.</li>
+      <li>Consistent means total profit is above $0 and the largest day is at most the limit (30% by default) of total profit. Exactly at the limit passes.</li>
+      <li>Profit target required is the larger of the profit target and the largest day divided by the limit.</li>
+      <li>Pass means consistent, total profit at or above the target, and at least the minimum number of traded days. Every row with a balance counts as a traded day.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

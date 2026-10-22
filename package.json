@@ -1,0 +1,9 @@
+{
+  "name": "consistency-checker",
+  "private": true,
+  "type": "module",
+  "description": "Static page that checks an evaluation's consistency rule. No dependencies.",
+  "scripts": {
+    "test": "node --test tests/logic.test.js"
+  }
+}

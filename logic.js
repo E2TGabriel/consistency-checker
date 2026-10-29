@@ -9,7 +9,8 @@
 //   largest profit = the biggest winning day (losing days never count as the largest)
 //   consistent     = total profit > 0 and largest profit <= limit x total profit
 //   required total = max(profit target, largest profit / limit)
-//   pass           = consistent AND total profit >= profit target AND traded days >= minimum
+//   pass           = consistent AND total profit >= profit target
+// There is no minimum number of traded days (Gabriel, 2026-10-29).
 
 export const BP = 10000; // basis points in 100%
 export const MAX_CENTS = 9e11; // $9,000,000,000
@@ -155,12 +156,11 @@ export function totalNeededFor(dayCents, pctBp) {
 
 // ---------- the daily log ----------
 
-export function analyze({ startCents, targetCents, pctBp, minDays, balances }) {
+export function analyze({ startCents, targetCents, pctBp, balances }) {
   const errors = [];
   if (startCents === null || startCents === undefined) errors.push('Enter the starting balance.');
   if (!(targetCents > 0)) errors.push('Enter a profit target above $0.');
   if (!(pctBp > 0 && pctBp <= BP)) errors.push('Enter a consistency limit above 0% and at most 100%.');
-  if (!(Number.isInteger(minDays) && minDays >= 1)) errors.push('Choose the minimum number of traded days.');
   if (errors.length) return { ready: false, errors };
 
   const days = [];
@@ -189,8 +189,7 @@ export function analyze({ startCents, targetCents, pctBp, minDays, balances }) {
   const requiredTotal = Math.max(targetCents, consistencyTotal);
   const consistent = total > 0 && largest * BP <= pctBp * total;
   const targetMet = total >= targetCents;
-  const daysMet = traded >= minDays;
-  const pass = consistent && targetMet && daysMet;
+  const pass = consistent && targetMet;
 
   const reasons = [];
   if (traded === 0) {
@@ -206,9 +205,6 @@ export function analyze({ startCents, targetCents, pctBp, minDays, balances }) {
   reasons.push({ ok: targetMet, key: 'target', text: targetMet
     ? `Total profit ${formatMoney(total)} reaches the ${formatMoney(targetCents)} target.`
     : `Total profit ${formatMoney(total)} is below the ${formatMoney(targetCents)} target (${formatMoney(targetCents - total)} to go).` });
-  reasons.push({ ok: daysMet, key: 'days', text: daysMet
-    ? `${traded} of ${minDays} days traded.`
-    : `${traded} of ${minDays} days traded (${minDays - traded} more needed).` });
 
   // ---------- the inverse numbers ----------
   const inverse = {
@@ -267,7 +263,6 @@ export function analyze({ startCents, targetCents, pctBp, minDays, balances }) {
     requiredTotal,
     consistent,
     targetMet,
-    daysMet,
     pass,
     reasons,
     inverse,
@@ -314,12 +309,11 @@ const SETTING_LABELS = {
   start: 'Starting balance',
   target: 'Profit target',
   pct: 'Consistency limit (%)',
-  minDays: 'Minimum traded days',
   calcHighest: 'Calculator: highest profit',
   calcTotal: 'Calculator: total profit',
   calcPct: 'Calculator: highest / total (%)',
 };
-// Minimum traded days is still written, but the page always uses 10, so it is not required.
+// A "Minimum traded days" line in an older file is ignored: the page has no such rule now.
 const REQUIRED_SETTINGS = ['start', 'target', 'pct'];
 const TABLE_HEAD = ['Row', 'Day', 'Balance', 'Profit/loss', 'Share of total (%)', 'OK once total profit reaches'];
 const MAX_FILE_ROWS = 400;
@@ -349,7 +343,7 @@ function csvField(v) {
   return /[",;\t\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// state: the page's raw inputs { start, target, pct, minDays, balances[], calcHighest, ... }
+// state: the page's raw inputs { start, target, pct, balances[], calcHighest, ... }
 // result: analyze() output for those inputs, plus inputErrors: the page's error lines (empty
 // when every input reads). savedOn: 'YYYY-MM-DD', Chicago's date.
 export function buildCsv(state, result, savedOn) {

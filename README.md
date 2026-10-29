@@ -17,8 +17,8 @@ A single static page that checks an evaluation's consistency rule. It replaces t
 - Consistent = total profit above $0 and largest day <= limit x total profit (exactly at the
   limit passes).
 - Profit target required = max(profit target, largest day / limit).
-- Pass = consistent, total profit >= profit target, and at least 10 traded days (fixed; there is no picker).
-  Every row with a balance counts as a traded day; empty rows are skipped.
+- Pass = consistent and total profit >= profit target. There is no minimum number of traded
+  days. Every row with a balance counts as a day; empty rows are skipped.
 
 Amounts use commas for thousands (50,123.45); a space inside an amount is never read, since
 "1 250.00" could be $1,250.00 or day 1 and $250.

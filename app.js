@@ -3,8 +3,9 @@ import {
   buildCsv, readSavedCsv,
 } from './logic.js';
 
-// Every evaluation needs 10 traded days, so the minimum is fixed (there is no picker).
-const DEFAULTS = { start: '50000', target: '3000', pct: '30', minDays: '10' };
+// There is no minimum number of traded days; the table just starts with 10 empty rows.
+const DEFAULTS = { start: '50000', target: '3000', pct: '30' };
+const START_ROWS = 10;
 const MAX_ROWS = 400;
 
 const $ = (id) => document.getElementById(id);
@@ -18,7 +19,7 @@ const els = {
 };
 
 const state = {
-  start: DEFAULTS.start, target: DEFAULTS.target, pct: DEFAULTS.pct, minDays: DEFAULTS.minDays,
+  start: DEFAULTS.start, target: DEFAULTS.target, pct: DEFAULTS.pct,
   balances: [], calcHighest: '', calcTotal: '', calcPct: '',
 };
 
@@ -39,7 +40,7 @@ function readHash() {
   if (p.has('s')) state.start = p.get('s');
   if (p.has('t')) state.target = p.get('t');
   if (p.has('c')) state.pct = p.get('c');
-  // An older link may carry d=15 from the time there was a picker; it is ignored.
+  // An older link may carry d= (minimum days, since removed); it is ignored.
   if (p.has('b')) {
     state.balances = p.get('b').split('_').slice(0, MAX_ROWS).map((part) => {
       try { return decodeURIComponent(part); } catch { return part; }
@@ -72,7 +73,7 @@ function writeHash() {
 // ---------- the daily table ----------
 
 function rowCount() {
-  return Math.min(MAX_ROWS, Math.max(Number(state.minDays), state.balances.length, 1));
+  return Math.min(MAX_ROWS, Math.max(START_ROWS, state.balances.length));
 }
 
 function ensureRows() {
@@ -266,7 +267,7 @@ function update() {
     balances.push(v);
   });
 
-  const res = analyze({ startCents, targetCents, pctBp, minDays: Number(state.minDays), balances });
+  const res = analyze({ startCents, targetCents, pctBp, balances });
   const errors = res.ready ? [] : res.errors.map((e) =>
     (e.startsWith('Enter the starting') && state.start.trim() ? 'The starting balance is not a number.' : e));
   if (badRows.length) errors.push(`Row${badRows.length > 1 ? 's' : ''} ${badRows.join(', ')}: not a number. Fix ${badRows.length > 1 ? 'them' : 'it'} to get a result.`);
@@ -311,7 +312,7 @@ function renderVerdict(res, errors, pctBp) {
   els.badge.className = 'badge ' + (res.pass ? 'badge-pass' : 'badge-fail');
   els.badge.textContent = res.pass ? 'PASS' : 'FAIL';
   // Fixed phrases only, so typing a new figure does not re-announce an unchanged verdict.
-  const NAMES = { consistency: 'consistency', target: 'profit target', days: 'days traded' };
+  const NAMES = { consistency: 'consistency', target: 'profit target' };
   const failed = res.reasons.filter((r) => !r.ok).map((r) => NAMES[r.key]);
   announce(res.pass ? 'Pass.' : `Fail. Not met: ${failed.join(', ')}.`);
   els.stats.hidden = false;
@@ -320,7 +321,7 @@ function renderVerdict(res, errors, pctBp) {
   els.stLargest.textContent = res.largest > 0 ? `${formatMoney(res.largest)} (day ${res.largestDay})` : '–';
   els.stShare.textContent = res.largestShareBp !== null ? `${formatPercent(res.largestShareBp)} (limit ${formatPercent(pctBp)})` : '–';
   els.stRequired.textContent = formatMoney(res.requiredTotal);
-  els.stDays.textContent = `${res.traded} of ${Number(state.minDays)}`;
+  els.stDays.textContent = String(res.traded);
 }
 
 function renderRows(res, ok) {
@@ -388,7 +389,6 @@ function renderInverse(res, ok, pctBp, targetCents) {
         : `A loss of more than ${formatMoney(inv.lossBuffer)} on the next traded day breaks consistency.`);
     }
   }
-  if (!res.daysMet) add(`${Number(state.minDays) - res.traded} more traded day${Number(state.minDays) - res.traded === 1 ? '' : 's'} needed.`);
 }
 
 // ---------- chart ----------
@@ -578,7 +578,6 @@ fileInput.addEventListener('change', async () => {
   for (const key of ['start', 'target', 'pct', 'calcHighest', 'calcTotal', 'calcPct']) {
     if (typeof data[key] === 'string') state[key] = data[key];
   }
-  // A file saved while the page offered 15 days still opens; the minimum is now always 10.
   state.balances = data.balances.slice(0, MAX_ROWS);
   for (const [input, key] of [[els.start, 'start'], [els.target, 'target'], [els.pct, 'pct'],
     [els.cHighest, 'calcHighest'], [els.cTotal, 'calcTotal'], [els.cPct, 'calcPct']]) input.value = state[key];

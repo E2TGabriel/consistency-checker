@@ -7,7 +7,7 @@ const fromPnl = (pnls, start = 50000) => {
   return pnls.map((p) => (b += p));
 };
 const pageState = (over = {}) => ({
-  start: '50000', target: '3000', pct: '30', minDays: '10', calcHighest: '', calcTotal: '', calcPct: '',
+  start: '50000', target: '3000', pct: '30', calcHighest: '', calcTotal: '', calcPct: '',
   balances: [], ...over,
 });
 // The same result the page builds: analyze() plus whether any row is not a number.
@@ -15,7 +15,7 @@ const resultFor = (st) => {
   const balances = st.balances.map((b) => (String(b).trim() ? parseMoney(b) : null));
   const bad = st.balances.some((b) => String(b).trim() && parseMoney(b) === null);
   const r = analyze({ startCents: parseMoney(st.start), targetCents: parseMoney(st.target),
-    pctBp: parsePercent(st.pct), minDays: Number(st.minDays), balances });
+    pctBp: parsePercent(st.pct), balances });
   return { ...r, inputErrors: bad ? ['Row: not a number.'] : [] };
 };
 
@@ -34,7 +34,7 @@ test('save file: a passing case writes settings, verdict and every day', () => {
 });
 
 test('save file: a failing case says FAIL and which rule is not met', () => {
-  const st = pageState({ minDays: '10', balances: ['51200', '51400'] });
+  const st = pageState({ balances: ['51200', '51400'] });
   const csv = buildCsv(st, resultFor(st), '2026-10-22');
   assert.match(csv, /\r\nResult,FAIL\r\n/);
   assert.match(csv, /\r\nNot met,"Largest day \(\$1,200\.00, day 1\) is 85\.72% of total profit, limit 30%\."\r\n/);
@@ -42,13 +42,13 @@ test('save file: a failing case says FAIL and which rule is not met', () => {
 
 test('save file: round trip gives back exactly the inputs', () => {
   const st = pageState({
-    start: '50,000', target: '3000', pct: '30', minDays: '10', calcHighest: '600', calcTotal: '3,225', calcPct: '',
+    start: '50,000', target: '3000', pct: '30', calcHighest: '600', calcTotal: '3,225', calcPct: '',
     balances: ['50,600', '', '50,900.5', 'oops, "quoted"', '', ''],
   });
   const back = readSavedCsv(buildCsv(st, resultFor(st), '2026-10-22'));
   assert.equal(back.error, undefined);
   assert.equal(back.start, '50,000');
-  assert.equal(back.minDays, '10');
+  assert.equal(back.minDays, undefined); // the page has no minimum days now
   assert.equal(back.calcHighest, '600');
   assert.equal(back.calcTotal, '3,225');
   assert.equal(back.calcPct, '');
@@ -140,7 +140,7 @@ test('open file: a semicolon copy without padding on the first line still opens'
     'Minimum traded days;10\r\n\r\nRow;Day;Balance;Profit/loss\r\n1;1;50600;600\r\n';
   const back = readSavedCsv(resaved);
   assert.equal(back.error, undefined);
-  assert.equal(back.minDays, '10');
+  assert.equal(back.minDays, undefined);
   assert.deepEqual(back.balances, ['50600']);
 });
 
@@ -148,11 +148,12 @@ test('open file: missing, doubled or out-of-range lines are refused, never fille
   const st = pageState({ balances: ['50600', '50800'] });
   const good = buildCsv(st, resultFor(st), '2026-10-22');
   assert.match(readSavedCsv(good.replace(/Starting balance,[^\r]*\r\n/, '')).error, /no "Starting balance" line/);
-  // the page always uses 10 days, so any value, or no line at all, still opens
-  assert.equal(readSavedCsv(good.replace('Minimum traded days,"10"', 'Minimum traded days,12')).error, undefined);
-  const noDaysLine = good.replace(/Minimum traded days,[^\r]*\r\n/, '');
-  assert.ok(!noDaysLine.includes('Minimum traded days'));
-  assert.equal(readSavedCsv(noDaysLine).error, undefined);
+  // a new file has no days line; an older file's line is ignored, whatever it says
+  assert.ok(!good.includes('Minimum traded days'));
+  const older = good.replace('Profit target,"3000"', 'Profit target,"3000"\r\nMinimum traded days,"15"');
+  assert.ok(older.includes('Minimum traded days'));
+  assert.equal(readSavedCsv(older).error, undefined);
+  assert.equal(readSavedCsv(older).minDays, undefined);
   assert.match(readSavedCsv(good.replace('Profit target,"3000"', 'Profit target,"3000"\r\nProfit target,"9000"')).error, /appears twice/);
   assert.match(readSavedCsv(good + '1,,99999,,,\r\n').error, /Row 1 appears twice/);
   assert.match(readSavedCsv(good + '401,,1,,,\r\n').error, /past the last row \(400\)/);

@@ -6,7 +6,7 @@ import {
 } from '../logic.js';
 
 const D = (dollars) => Math.round(dollars * 100); // dollars -> cents
-const base = { startCents: D(50000), targetCents: D(3000), pctBp: 3000, minDays: 10 };
+const base = { startCents: D(50000), targetCents: D(3000), pctBp: 3000 };
 const run = (balancesDollars, over = {}) =>
   analyze({ ...base, ...over, balances: balancesDollars.map((b) => (b === null ? null : D(b))) });
 
@@ -174,16 +174,16 @@ test('the example from the request: a $600 day in $3,225 total is 18.61% and pas
   assert.equal(r.inverse.tomorrow.lower, 0);
   assert.equal(r.inverse.tomorrow.toTarget, null); // target met: no target sentences
   assert.equal(r.inverse.tomorrow.passInOneDay, null);
-  assert.deepEqual(r.reasons.map((x) => x.ok), [true, true, true]);
+  assert.deepEqual(r.reasons.map((x) => x.ok), [true, true]); // consistency and target only
 });
 
 test('exactly at the limit passes; one cent over fails', () => {
-  const at = run(fromPnl([900, 700, 700, 700]), { minDays: 4 });
+  const at = run(fromPnl([900, 700, 700, 700]));
   assert.equal(at.total, D(3000));
   assert.equal(at.largestShareBp, 3000);
   assert.equal(at.consistent, true);
   assert.equal(at.pass, true);
-  const over = run(fromPnl([900.01, 700, 700, 699.99]), { minDays: 4 });
+  const over = run(fromPnl([900.01, 700, 700, 699.99]));
   assert.equal(over.total, D(3000));
   assert.equal(over.consistent, false);
   assert.equal(over.pass, false);
@@ -195,7 +195,7 @@ test('exactly at the limit passes; one cent over fails', () => {
 });
 
 test('losing days never count as the largest day but do lower the total', () => {
-  const r = run(fromPnl([500, -1500, 800, 400, 900, 700, 600, 700]), { minDays: 8 });
+  const r = run(fromPnl([500, -1500, 800, 400, 900, 700, 600, 700]));
   assert.equal(r.total, D(3100));
   assert.equal(r.largest, D(900));
   assert.equal(r.largestDay, 5);
@@ -206,7 +206,7 @@ test('losing days never count as the largest day but do lower the total', () => 
 });
 
 test('the profit target required rises above the target when one day is too big', () => {
-  const r = run(fromPnl([1200, 600, 600, 600]), { minDays: 4 });
+  const r = run(fromPnl([1200, 600, 600, 600]));
   assert.equal(r.total, D(3000));
   assert.equal(r.consistent, false);
   assert.equal(r.requiredTotal, D(4000));
@@ -215,7 +215,7 @@ test('the profit target required rises above the target when one day is too big'
 });
 
 test('a single winning day is 100% of profit and fails', () => {
-  const r = run([53000], { minDays: 1 });
+  const r = run([53000]);
   assert.equal(r.total, D(3000));
   assert.equal(r.largestShareBp, 10000);
   assert.equal(r.consistent, false);
@@ -235,12 +235,11 @@ test('net loss: consistency cannot pass and nothing suggests otherwise', () => {
 });
 
 test('zero total: flat days count as traded but cannot pass', () => {
-  const r = run([50000, 50000, 50000], { minDays: 3 });
+  const r = run([50000, 50000, 50000]);
   assert.equal(r.traded, 3);
   assert.equal(r.total, 0);
   assert.equal(r.largest, 0);
   assert.equal(r.consistent, false);
-  assert.equal(r.daysMet, true);
   assert.equal(r.pass, false);
   assert.equal(r.inverse.tomorrow.possible, false);
 });
@@ -254,28 +253,31 @@ test('no days entered', () => {
 });
 
 test('blank rows are skipped and P&L runs from the previous filled balance', () => {
-  const r = run([50300, null, 50100, null, null, 50600], { minDays: 3 });
+  const r = run([50300, null, 50100, null, null, 50600]);
   assert.equal(r.traded, 3);
   assert.deepEqual(r.days.map((d) => [d.row, d.day, d.pnl]), [[0, 1, D(300)], [2, 2, D(-200)], [5, 3, D(500)]]);
   assert.equal(r.total, D(600));
 });
 
-test('minimum days: 10 and 15', () => {
-  const pnls = Array(12).fill(250); // $3,000 over 12 days, each 8.33%
-  assert.equal(run(fromPnl(pnls), { minDays: 10 }).pass, true);
-  const r15 = run(fromPnl(pnls), { minDays: 15 });
-  assert.equal(r15.pass, false);
-  assert.equal(r15.reasons[2].text, '12 of 15 days traded (3 more needed).');
+test('there is no minimum number of traded days', () => {
+  // four days, consistent and on target: passes, however few days that is
+  const four = run(fromPnl([900, 700, 700, 700]));
+  assert.equal(four.pass, true);
+  assert.equal(four.daysMet, undefined);
+  assert.deepEqual(four.reasons.map((x) => x.key), ['consistency', 'target']);
+  assert.ok(four.reasons.every((x) => !/days traded/.test(x.text)));
+  // and many days change nothing either
+  assert.equal(run(fromPnl(Array(40).fill(75))).pass, true);
 });
 
 test('profit target not met', () => {
-  const r = run(fromPnl([200, 200, 200]), { minDays: 3 });
+  const r = run(fromPnl([200, 200, 200]));
   assert.equal(r.targetMet, false);
   assert.match(r.reasons[1].text, /below the \$3,000\.00 target \(\$2,400\.00 to go\)/);
 });
 
 test('a 100% limit with a net loss: no single day can make it consistent', () => {
-  const r = run([51000, 49000], { pctBp: 10000, minDays: 1 });
+  const r = run([51000, 49000], { pctBp: 10000 });
   assert.equal(r.total, D(-1000));
   assert.equal(r.inverse.tomorrow.possible, false);
   assert.equal(r.inverse.tomorrow.passInOneDay, null);
@@ -283,7 +285,7 @@ test('a 100% limit with a net loss: no single day can make it consistent', () =>
 });
 
 test('a 100% limit at zero total: any winning day at least the old largest works', () => {
-  const r = run([51000, 50000], { pctBp: 10000, minDays: 1 });
+  const r = run([51000, 50000], { pctBp: 10000 });
   assert.equal(r.total, 0);
   assert.equal(r.inverse.tomorrow.possible, true);
   assert.equal(r.inverse.tomorrow.lower, D(1000));
@@ -291,7 +293,7 @@ test('a 100% limit at zero total: any winning day at least the old largest works
 });
 
 test('two equal winning days: the first one is named as the largest', () => {
-  const r = run(fromPnl([500, 500, 400]), { minDays: 3 });
+  const r = run(fromPnl([500, 500, 400]));
   assert.equal(r.largestDay, 1);
   assert.deepEqual(r.days.map((d) => d.isLargest), [true, false, false]);
 });
@@ -301,13 +303,12 @@ test('zero total leaves the per-day and largest-day figures empty', () => {
   assert.equal(r.inverse.largestOkAtTotal, null);
 });
 
-test('a non-integer minimum and a missing start are refused', () => {
-  assert.equal(analyze({ ...base, minDays: 1.5, balances: [] }).ready, false);
+test('a missing start is refused', () => {
   assert.equal(analyze({ ...base, startCents: undefined, balances: [] }).ready, false);
 });
 
 test('a 100% limit never fails consistency on a profitable account without losses', () => {
-  const r = run([53000], { minDays: 1, pctBp: 10000 });
+  const r = run([53000], { pctBp: 10000 });
   assert.equal(r.consistent, true);
   assert.equal(r.pass, true);
   assert.equal(r.inverse.tomorrow.upper, null); // no cap
@@ -318,7 +319,6 @@ test('bad settings return errors instead of a verdict', () => {
   assert.equal(analyze({ ...base, targetCents: 0, balances: [] }).ready, false);
   assert.equal(analyze({ ...base, pctBp: 0, balances: [] }).ready, false);
   assert.equal(analyze({ ...base, pctBp: 10001, balances: [] }).ready, false);
-  assert.equal(analyze({ ...base, minDays: 0, balances: [] }).ready, false);
 });
 
 test('helpers', () => {
@@ -391,12 +391,12 @@ test('tomorrow window [lower, upper] matches brute force on random accounts', ()
     if (t.toTarget !== null && t.passInOneDay === null && t.upper !== null) {
       // nothing from the target up to well past the window passes in one day
       for (const p of [t.toTarget, t.upper, t.upper + 1, t.toTarget * 2]) {
-        const a = analyze({ ...base, pctBp, minDays: 1, balances: [...balances, balances.at(-1) + p] });
+        const a = analyze({ ...base, pctBp, balances: [...balances, balances.at(-1) + p] });
         assert.ok(!(a.consistent && a.targetMet), `no one-day pass n=${n} p=${p}`);
       }
     }
     if (t.toTarget !== null && t.passInOneDay !== null) {
-      const after = (p) => analyze({ ...base, pctBp, minDays: 1, balances: [...balances, balances.at(-1) + p] });
+      const after = (p) => analyze({ ...base, pctBp, balances: [...balances, balances.at(-1) + p] });
       assert.ok(after(t.passInOneDay).consistent && after(t.passInOneDay).targetMet, `passInOneDay n=${n}`);
       if (t.passInOneDay > 0) {
         const prev = after(t.passInOneDay - 1);

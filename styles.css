@@ -157,3 +157,5 @@ table.log { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
 .swipe-hint { display: none; margin: 0 0 8px; color: var(--muted); font-size: 0.8rem; }
 @media (max-width: 600px) { .swipe-hint { display: block; } }
 [hidden] { display: none !important; }
+.fixed-setting { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-2); }
+.fixed-value { font-size: 15px; color: var(--text); padding: 8px 0; font-weight: 600; }

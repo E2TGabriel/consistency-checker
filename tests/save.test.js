@@ -7,7 +7,7 @@ const fromPnl = (pnls, start = 50000) => {
   return pnls.map((p) => (b += p));
 };
 const pageState = (over = {}) => ({
-  start: '50000', target: '3000', pct: '30', minDays: '15', calcHighest: '', calcTotal: '', calcPct: '',
+  start: '50000', target: '3000', pct: '30', minDays: '10', calcHighest: '', calcTotal: '', calcPct: '',
   balances: [], ...over,
 });
 // The same result the page builds: analyze() plus whether any row is not a number.
@@ -148,7 +148,11 @@ test('open file: missing, doubled or out-of-range lines are refused, never fille
   const st = pageState({ balances: ['50600', '50800'] });
   const good = buildCsv(st, resultFor(st), '2026-10-22');
   assert.match(readSavedCsv(good.replace(/Starting balance,[^\r]*\r\n/, '')).error, /no "Starting balance" line/);
-  assert.match(readSavedCsv(good.replace('Minimum traded days,"15"', 'Minimum traded days,12')).error, /must be 15 or 10/);
+  // the page always uses 10 days, so any value, or no line at all, still opens
+  assert.equal(readSavedCsv(good.replace('Minimum traded days,"10"', 'Minimum traded days,12')).error, undefined);
+  const noDaysLine = good.replace(/Minimum traded days,[^\r]*\r\n/, '');
+  assert.ok(!noDaysLine.includes('Minimum traded days'));
+  assert.equal(readSavedCsv(noDaysLine).error, undefined);
   assert.match(readSavedCsv(good.replace('Profit target,"3000"', 'Profit target,"3000"\r\nProfit target,"9000"')).error, /appears twice/);
   assert.match(readSavedCsv(good + '1,,99999,,,\r\n').error, /Row 1 appears twice/);
   assert.match(readSavedCsv(good + '401,,1,,,\r\n').error, /past the last row \(400\)/);

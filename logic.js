@@ -319,7 +319,8 @@ const SETTING_LABELS = {
   calcTotal: 'Calculator: total profit',
   calcPct: 'Calculator: highest / total (%)',
 };
-const REQUIRED_SETTINGS = ['start', 'target', 'pct', 'minDays'];
+// Minimum traded days is still written, but the page always uses 10, so it is not required.
+const REQUIRED_SETTINGS = ['start', 'target', 'pct'];
 const TABLE_HEAD = ['Row', 'Day', 'Balance', 'Profit/loss', 'Share of total (%)', 'OK once total profit reaches'];
 const MAX_FILE_ROWS = 400;
 
@@ -438,9 +439,6 @@ export function readSavedCsv(text) {
     if (byLabel.has(label)) out[key] = untext(byLabel.get(label));
     else if (REQUIRED_SETTINGS.includes(key)) return { error: `The file has no "${label}" line.` };
     else out[key] = '';
-  }
-  if (!['15', '10'].includes(out.minDays)) {
-    return { error: `Minimum traded days in the file is "${out.minDays}"; it must be 15 or 10.` };
   }
   const seen = new Set();
   for (const r of rows.slice(headAt + 1)) {

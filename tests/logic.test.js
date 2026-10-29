@@ -6,7 +6,7 @@ import {
 } from '../logic.js';
 
 const D = (dollars) => Math.round(dollars * 100); // dollars -> cents
-const base = { startCents: D(50000), targetCents: D(3000), pctBp: 3000, minDays: 15 };
+const base = { startCents: D(50000), targetCents: D(3000), pctBp: 3000, minDays: 10 };
 const run = (balancesDollars, over = {}) =>
   analyze({ ...base, ...over, balances: balancesDollars.map((b) => (b === null ? null : D(b))) });
 

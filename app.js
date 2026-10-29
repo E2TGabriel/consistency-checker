@@ -3,13 +3,13 @@ import {
   buildCsv, readSavedCsv,
 } from './logic.js';
 
-const DEFAULTS = { start: '50000', target: '3000', pct: '30', minDays: '15' };
-const MIN_DAY_CHOICES = ['15', '10'];
+// Every evaluation needs 10 traded days, so the minimum is fixed (there is no picker).
+const DEFAULTS = { start: '50000', target: '3000', pct: '30', minDays: '10' };
 const MAX_ROWS = 400;
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  start: $('start'), target: $('target'), pct: $('pct'), minDays: $('min-days'),
+  start: $('start'), target: $('target'), pct: $('pct'),
   badge: $('badge'), reasons: $('reasons'), inverse: $('inverse'),
   stTotal: $('st-total'), stLargest: $('st-largest'), stShare: $('st-share'),
   stRequired: $('st-required'), stDays: $('st-days'), live: $('live'), pasteNote: $('paste-note'), stats: document.querySelector('.stats'),
@@ -39,7 +39,7 @@ function readHash() {
   if (p.has('s')) state.start = p.get('s');
   if (p.has('t')) state.target = p.get('t');
   if (p.has('c')) state.pct = p.get('c');
-  if (MIN_DAY_CHOICES.includes(p.get('d'))) state.minDays = p.get('d');
+  // An older link may carry d=15 from the time there was a picker; it is ignored.
   if (p.has('b')) {
     state.balances = p.get('b').split('_').slice(0, MAX_ROWS).map((part) => {
       try { return decodeURIComponent(part); } catch { return part; }
@@ -55,7 +55,6 @@ function writeHash() {
   p.set('s', state.start.trim());
   p.set('t', state.target.trim());
   p.set('c', state.pct.trim());
-  p.set('d', state.minDays);
   // A row that is not a number keeps its exact text in the link (escaped, so "_" cannot split
   // it), so a shared case still shows the same error instead of a verdict without that row.
   const bal = state.balances.map((raw) => {
@@ -193,14 +192,6 @@ function bindAll() {
   bindInput(els.cHighest, 'calcHighest');
   bindInput(els.cTotal, 'calcTotal');
   bindInput(els.cPct, 'calcPct');
-  els.minDays.value = state.minDays;
-  els.minDays.addEventListener('change', () => {
-    state.minDays = els.minDays.value;
-    // Drop empty rows at the end so the table shrinks to the new minimum as well as growing.
-    while (state.balances.length > Number(state.minDays) && !state.balances[state.balances.length - 1].trim()) state.balances.pop();
-    buildRows();
-    update();
-  });
 }
 
 $('clear-calc').addEventListener('click', () => {
@@ -214,7 +205,6 @@ $('reset-all').addEventListener('click', () => {
   Object.assign(state, { ...DEFAULTS, balances: [], calcHighest: '', calcTotal: '', calcPct: '' });
   for (const [input, key] of [[els.start, 'start'], [els.target, 'target'], [els.pct, 'pct'],
     [els.cHighest, 'calcHighest'], [els.cTotal, 'calcTotal'], [els.cPct, 'calcPct']]) input.value = state[key];
-  els.minDays.value = state.minDays;
   els.pasteNote.hidden = true;
   buildRows();
   update();
@@ -581,18 +571,17 @@ fileInput.addEventListener('change', async () => {
     return;
   }
   const hasWork = state.balances.some((b) => b.trim())
-    || ['start', 'target', 'pct', 'minDays'].some((k) => state[k].trim() !== DEFAULTS[k])
+    || ['start', 'target', 'pct'].some((k) => state[k].trim() !== DEFAULTS[k])
     || [state.calcHighest, state.calcTotal, state.calcPct].some((v) => v.trim());
   if (hasWork && !confirm('Replace what is on the page with the saved file?')) return;
   Object.assign(state, { ...DEFAULTS, balances: [], calcHighest: '', calcTotal: '', calcPct: '' });
   for (const key of ['start', 'target', 'pct', 'calcHighest', 'calcTotal', 'calcPct']) {
     if (typeof data[key] === 'string') state[key] = data[key];
   }
-  if (MIN_DAY_CHOICES.includes(data.minDays)) state.minDays = data.minDays;
+  // A file saved while the page offered 15 days still opens; the minimum is now always 10.
   state.balances = data.balances.slice(0, MAX_ROWS);
   for (const [input, key] of [[els.start, 'start'], [els.target, 'target'], [els.pct, 'pct'],
     [els.cHighest, 'calcHighest'], [els.cTotal, 'calcTotal'], [els.cPct, 'calcPct']]) input.value = state[key];
-  els.minDays.value = state.minDays;
   showNote(`Opened ${file.name}.`); // update() below keeps it up once
   buildRows();
   update();
@@ -609,7 +598,6 @@ window.addEventListener('hashchange', () => {
   els.pasteNote.hidden = true;
   for (const [input, key] of [[els.start, 'start'], [els.target, 'target'], [els.pct, 'pct'],
     [els.cHighest, 'calcHighest'], [els.cTotal, 'calcTotal'], [els.cPct, 'calcPct']]) input.value = state[key];
-  els.minDays.value = state.minDays;
   buildRows();
   update();
 });

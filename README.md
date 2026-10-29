@@ -17,7 +17,7 @@ A single static page that checks an evaluation's consistency rule. It replaces t
 - Consistent = total profit above $0 and largest day <= limit x total profit (exactly at the
   limit passes).
 - Profit target required = max(profit target, largest day / limit).
-- Pass = consistent, total profit >= profit target, and traded days >= the minimum (15 or 10).
+- Pass = consistent, total profit >= profit target, and at least 10 traded days (fixed; there is no picker).
   Every row with a balance counts as a traded day; empty rows are skipped.
 
 Amounts use commas for thousands (50,123.45); a space inside an amount is never read, since
@@ -57,6 +57,6 @@ Opening `index.html` straight from disk does not work (browsers block module scr
 
 ## Link format
 
-`#s=50000&t=3000&c=30&d=15&b=50600_50800_51000` : starting balance, profit target,
-limit %, minimum days, balances separated by `_` (an empty slot is an empty row).
+`#s=50000&t=3000&c=30&b=50600_50800_51000` : starting balance, profit target,
+limit %, balances separated by `_` (an empty slot is an empty row).
 `ch`, `ct`, `cp` hold the quick calculator's fields.

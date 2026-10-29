@@ -38,12 +38,9 @@
       <label>Consistency limit (%)
         <input id="pct" inputmode="decimal" autocomplete="off" placeholder="e.g. 30">
       </label>
-      <label>Minimum traded days
-        <select id="min-days">
-          <option value="15">15 days</option>
-          <option value="10">10 days</option>
-        </select>
-      </label>
+      <div class="fixed-setting">Minimum traded days
+        <span class="fixed-value">10 days</span>
+      </div>
     </div>
   </section>
 
@@ -127,7 +124,7 @@
       <li>The largest day is the biggest winning day. Losing days never count as the largest.</li>
       <li>Consistent means total profit is above $0 and the largest day is at most the limit (30% by default) of total profit. Exactly at the limit passes.</li>
       <li>Profit target required is the larger of the profit target and the largest day divided by the limit.</li>
-      <li>Pass means consistent, total profit at or above the target, and at least the minimum number of traded days. Every row with a balance counts as a traded day.</li>
+      <li>Pass means consistent, total profit at or above the target, and at least 10 traded days. Every row with a balance counts as a traded day.</li>
     </ul>
   </section>
 </main>
